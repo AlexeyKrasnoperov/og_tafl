@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@thirdweb-dev/contracts/eip/ERC721A.sol";
 
-contract OgtaflKingNFT is ERC721 {
+contract OgtaflKingNFT is ERC721A {
     
     uint256 public constant MAX_KINGS = 4;
     uint256 public currentTokenId;
@@ -16,7 +15,7 @@ contract OgtaflKingNFT is ERC721 {
         "ipfs://QmPLcApbLFBPJLoH8KcjxcAPqUgCy6rEjoxRa24WzeJCDB"
     ];
 
-    constructor() ERC721("OgtaflKing", "KING") {}
+    constructor() ERC721A("OgtaflKing", "KING") {}
 
     function mintKingNFT() public {
         require(balanceOf(msg.sender) == 0, "You already own a Ogtafl King NFT");
