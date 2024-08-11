@@ -7,8 +7,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract OgtaflGame is Ownable {
     uint8 public constant BOARD_SIZE = 11;
 
-    address public attacker; // Attacker
-    address public defender; // Defender
+    address public player1; // Attacker
+    address public player2; // Defender
     address public winner;
 
     // King NFTs staked by players
@@ -20,7 +20,7 @@ contract OgtaflGame is Ownable {
     enum GameState { Waiting, Active, Completed }
     GameState public gameState;
 
-    bool public isAttackerTurn;
+    bool public isPlayer1Turn;
 
     // Board Representation
     // 0 => Empty
@@ -46,57 +46,46 @@ contract OgtaflGame is Ownable {
     }
 
     modifier onlyCurrentPlayer() {
-        if (isAttackerTurn) {
-            require(msg.sender == attacker, "Not your turn");
+        if (isPlayer1Turn) {
+            require(msg.sender == player1, "Not your turn");
         } else {
-            require(msg.sender == defender, "Not your turn");
+            require(msg.sender == player2, "Not your turn");
         }
         _;
     }
 
-    constructor(address _kingNFTContract) Ownable(msg.sender) {
+    constructor(address _player1, address _kingNFTContract, uint256 _player1KingTokenId) Ownable(msg.sender) {
+        player1 = _player1;
         kingNFTContract = IERC721(_kingNFTContract);
+        player1KingTokenId = _player1KingTokenId;
         gameState = GameState.Waiting;
     }
 
     /** @dev Start the game by staking King NFTs from both players.
-      * @param _player1 Address of player1.
-      * @param _player1KingTokenId Token ID of player1's King NFT.
       * @param _player2 Address of player2.
       * @param _player2KingTokenId Token ID of player2's King NFT.
       */
     function startGame(
-        address _player1,
-        uint256 _player1KingTokenId,
         address _player2,
         uint256 _player2KingTokenId
     ) public gameInState(GameState.Waiting) {
-        require(
-            kingNFTContract.ownerOf(_player1KingTokenId) == _player1 &&
-            kingNFTContract.ownerOf(_player2KingTokenId) == _player2,
-            "Players must own the NFTs they stake"
-        );
+        require(player1 != _player2, "Player cannot play against themselves");
 
         // TODO: Randomize attacker/defender using Chainlink VRF
-        attacker = _player1;
-        defender = _player2;
-        isPlayer[attacker] = true;
-        isPlayer[defender] = true;
+        player2 = _player2;
+        isPlayer[player1] = true;
+        isPlayer[player2] = true;
 
-        player1KingTokenId = _player1KingTokenId;
         player2KingTokenId = _player2KingTokenId;
-
-        kingNFTContract.transferFrom(attacker, address(this), player1KingTokenId);
-        kingNFTContract.transferFrom(defender, address(this), player2KingTokenId);
 
         initializeBoard();
 
         gameState = GameState.Active;
 
         // Attacker starts first
-        isAttackerTurn = true;
+        isPlayer1Turn = true;
 
-        emit GameStarted(attacker, defender);
+        emit GameStarted(player1, player2);
     }
 
     /** @dev Initialize the board with starting positions. */
@@ -181,7 +170,7 @@ contract OgtaflGame is Ownable {
         require(movingPiece != 0, "No piece at the source");
         require(board[toX][toY] == 0, "Destination not empty");
 
-        if (isAttackerTurn) {
+        if (isPlayer1Turn) {
             require(movingPiece == 1, "You can only move your own pieces");
         } else {
             require(movingPiece == 2 || movingPiece == 3, "You can only move your own pieces");
@@ -204,7 +193,7 @@ contract OgtaflGame is Ownable {
             return;
         }
 
-        isAttackerTurn = !isAttackerTurn;
+        isPlayer1Turn = !isPlayer1Turn;
     }
 
     /** @dev Check if coordinates are within the board. */
@@ -277,8 +266,8 @@ contract OgtaflGame is Ownable {
             return;
         }
 
-        uint8 movingPlayerPiece = isAttackerTurn ? 1 : 2;
-        uint8 opponentPiece = isAttackerTurn ? 2 : 1;
+        uint8 movingPlayerPiece = isPlayer1Turn ? 1 : 2;
+        uint8 opponentPiece = isPlayer1Turn ? 2 : 1;
         uint8 targetPiece = board[targetX][targetY];
         uint8 oppositePiece = board[oppositeX][oppositeY];
 
@@ -301,7 +290,7 @@ contract OgtaflGame is Ownable {
 
     /** @dev Check if a piece is surrounded on four sides. */
     function isSurrounded(uint8 x, uint8 y) internal view returns (bool) {
-        uint8 enemyPiece = isAttackerTurn ? 1 : 2;
+        uint8 enemyPiece = isPlayer1Turn ? 1 : 2;
         // Check up
         if (x == 0 || board[x - 1][y] != enemyPiece) {
             return false;
@@ -390,22 +379,18 @@ contract OgtaflGame is Ownable {
         // Determine winner
         if (!isKingOnBoard()) {
             // Attacker wins
-            winner = attacker;
+            winner = player1;
         } else if (isKingAtCorner()) {
             // Defender wins
-            winner = defender;
+            winner = player2;
         } else {
             revert("No win condition met");
         }
 
-        uint256 wonKingTokenId = winner == attacker ? player2KingTokenId : player1KingTokenId;
+        uint256 wonKingTokenId = winner == player1 ? player2KingTokenId : player1KingTokenId;
 
-        // Transfer the loser's King NFT to the winner
-        kingNFTContract.transferFrom(address(this), winner, wonKingTokenId);
-
-        // Return the winner's own King NFT
-        uint256 winnerKingTokenId = winner == attacker ? player1KingTokenId : player2KingTokenId;
-        kingNFTContract.transferFrom(address(this), winner, winnerKingTokenId);
+        kingNFTContract.transferFrom(address(this), winner, player1KingTokenId);
+        kingNFTContract.transferFrom(address(this), winner, player2KingTokenId);
 
         emit GameWon(winner, wonKingTokenId);
     }
